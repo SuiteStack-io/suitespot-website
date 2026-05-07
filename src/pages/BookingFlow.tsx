@@ -635,13 +635,11 @@ const BookingFlow = () => {
                   },
                 }
               );
-              console.log('[DynamicPricing] batch result:', batchResult, 'error:', batchError);
               if (!batchError && batchResult?.success && batchResult.rates) {
                 setDailyRates(
                   batchResult.rates.map((r: any) => ({ date: r.target_date, finalRate: r.final_rate, baseRate: r.base_rate }))
                 );
               } else {
-                console.warn('[DynamicPricing] falling back to static rates', { batchError, batchResult });
                 setDailyRates([]);
               }
             } catch {

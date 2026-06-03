@@ -1,73 +1,55 @@
-# React + TypeScript + Vite
+# SuiteSpot Website
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Marketing + property browsing site for SuiteSpot. React 19 + TypeScript + Vite, styled with Tailwind and Radix UI, data layer on Supabase.
 
-Currently, two official plugins are available:
+## Quick start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+cp .env.example .env   # then fill in the values — see below
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Dev server runs on http://localhost:5173 by default.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Environment variables
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Copy `.env.example` to `.env` and populate the keys. Only the Supabase pair is required to boot — the app calls `createClient()` at module load, so missing values throw before the first render.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | yes | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | yes | Supabase anon/publishable key |
+| `VITE_GOOGLE_MAPS_API_KEY` | no | Enables `InteractivePropertyMap`; map is blank without it |
+| `VITE_DEFAULT_PROPERTY_ID` | no | Default property shown by `propertyContext`; defaults to `''` |
+
+All variables must be `VITE_`-prefixed — Vite only exposes prefixed vars to the browser bundle.
+
+## Scripts
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the Vite dev server with HMR |
+| `npm run build` | Type-check (`tsc -b`) then produce a production build in `dist/` |
+| `npm run preview` | Serve the built `dist/` locally |
+| `npm run lint` | Run ESLint over the repo |
+
+## Stack
+
+- **Framework:** React 19, React Router 7, Vite 5
+- **Styling:** Tailwind CSS 3, Radix UI primitives, `tailwindcss-animate`
+- **Data:** Supabase JS, TanStack Query
+- **Forms:** React Hook Form + Zod
+- **Maps:** `@react-google-maps/api`
+- **Deployment:** Vercel (`vercel.json`)
+
+## Project layout
+
+```
+src/
+  components/        UI components (incl. InteractivePropertyMap)
+  integrations/
+    supabase/        Supabase client + generated types
+  lib/               Shared utilities and React contexts (propertyContext, …)
+public/              Static assets served as-is
 ```

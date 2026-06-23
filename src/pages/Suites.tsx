@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { Wifi, Tv, Coffee, Wind, Users, Bed, Loader2, Camera } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { content } from "@/integrations/content/client";
 import { useToast } from "@/hooks/use-toast";
 import { getDefaultPropertyId } from "@/lib/propertyContext";
 import { PublicNav } from "@/components/PublicNav";
@@ -82,7 +83,9 @@ const Suites = () => {
     if (!defaultPropertyId) return;
     const fetchUnits = async () => {
       try {
-        const [unitsRes, rtPhotosRes, unitPhotosRes] = await Promise.all([
+        // Booking data (units) stays on the PMS; room-type photos now come from
+        // the dedicated content project (Decision #13). unit_photos retired.
+        const [unitsRes, rtPhotosRes] = await Promise.all([
           supabase
             .from("units")
             .select("id, name, booking_com_name, unit_type, unit_number, unit_size, status, comments, photos, max_guests, beds, features, show_on_website, room_type_display_order")
@@ -91,14 +94,9 @@ const Suites = () => {
             .eq("show_on_website", true)
             .eq("property_id", defaultPropertyId)
             .order("room_type_display_order"),
-          supabase
+          content
             .from("room_type_photos")
             .select("room_type_name, photo_url, display_order, is_cover")
-            .eq("property_id", defaultPropertyId)
-            .order("display_order"),
-          supabase
-            .from("unit_photos")
-            .select("unit_id, photo_url, display_order")
             .order("display_order"),
         ]);
 
@@ -111,11 +109,8 @@ const Suites = () => {
           rtPhotosByType[p.room_type_name].push({ url: p.photo_url, isCover: p.is_cover });
         });
 
+        // unit_photos retired in the PMS→content split; no per-unit overrides.
         const unitPhotosByUnit: Record<string, string[]> = {};
-        (unitPhotosRes.data || []).forEach((p: any) => {
-          if (!unitPhotosByUnit[p.unit_id]) unitPhotosByUnit[p.unit_id] = [];
-          unitPhotosByUnit[p.unit_id].push(p.photo_url);
-        });
         
         const grouped = (unitsRes.data || []).reduce((acc, unit) => {
           const type = unit.unit_type || "Other";

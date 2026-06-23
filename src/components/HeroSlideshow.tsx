@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { content as supabase } from '@/integrations/content/client';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface SlideshowImage {

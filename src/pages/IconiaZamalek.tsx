@@ -6,7 +6,7 @@ import { OurStorySlideshow } from "@/components/OurStorySlideshow";
 import { PublicNav } from "@/components/PublicNav";
 import { PublicFooter } from "@/components/PublicFooter";
 import { SEO } from "@/components/SEO";
-import { supabase } from "@/integrations/supabase/client";
+import { content as supabase } from "@/integrations/content/client";
 
 const IconiaZamalek = () => {
   const [slideshowImage, setSlideshowImage] = useState<string | null>(null);

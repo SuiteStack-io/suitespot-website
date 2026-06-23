@@ -78,14 +78,15 @@ plus `Toaster` (shadcn) and `Sonner` toasts.
 
 ---
 
-## Booking API repoint (Phase 2.4-B)
+## Booking API repoint (Phase 2.4-B) — ✅ live in production
 
-Branch `feat/booking-api`. The public site no longer queries the PMS booking
-tables directly with the anon key. All booking data flows through **four Hostbase
-Edge Functions** at `${VITE_SUPABASE_URL}/functions/v1` (POST, JSON,
-`verify_jwt=false` — no apikey/JWT). The functions resolve the tenant from the
-request **Origin** (with an optional `serving_host` body fallback for
-localhost/preview) and return only that org's data.
+**Merged to `main` and live on `findyoursuitespot.com`** (PRs #2 + #3). The public
+site no longer queries the PMS booking tables directly with the anon key. All
+booking data flows through **four Hostbase Edge Functions** at
+`${VITE_SUPABASE_URL}/functions/v1` (POST, JSON, `verify_jwt=false` — no
+apikey/JWT). The functions resolve the tenant from the request **Origin** (with an
+optional `serving_host` body fallback for localhost/preview) and return only that
+org's data.
 
 - **Client:** `src/lib/bookingApi.ts` — typed `post()` helper that injects
   `serving_host`, throws `BookingApiError` on non-2xx. Exports
@@ -94,6 +95,12 @@ localhost/preview) and return only that org's data.
   `BookingWidget.tsx` (date/guest hand-off only), `Locations.tsx` (property
   marker + representative rate), `Suites.tsx` (`units` → `getAvailability`,
   keeps the content `room_type_photos` read). `rateResolver.ts` deleted.
+- **Room-type key:** pricing lookups resolve `room_type` by **`units.name`**
+  (`name || booking_com_name || unit_type`), matching the rate-plan key and the
+  server's `public-create-reservation` resolution, so the displayed price and the
+  charged price always hit the same rate plan. Display labels still use
+  `booking_com_name`. (PR #3 — fixed a 422 where the create path priced by
+  `unit_type` while the read path priced by name.)
 - **Pricing parity:** the site's `calculateSubtotal/Tax/Total` are unchanged, fed
   by `ratePlan` + `rates` (from `public-rates`) and `unit.tax_percentage` (from
   `public-availability`). The server recomputes the price authoritatively
@@ -105,14 +112,18 @@ localhost/preview) and return only that org's data.
   enforced after a range is picked — `getAvailability` returns `availableUnitIds`
   (the bookable subset) and the suite dropdown shows "no suites available" when a
   range is fully booked. Server returns `409` as the final backstop.
-- **Prod-ready:** all four functions are live on **prod** and the prod
-  org→domain map resolves, so a Vercel preview pointed at prod
-  (`VITE_SUPABASE_URL`=prod, `VITE_BOOKING_SERVING_HOST=findyoursuitespot.com`)
-  works end-to-end. They're also on staging (`lziepvaoiwxxajvpvkwu`), where the
-  contract was verified (property, availability, rates, dated `availableUnitIds`,
-  400 on bad create).
-- `npm run build` passes. Verify the full flow on a Vercel preview (env above)
-  before merging to `main`.
+- **Environments:** functions are live on **prod** (`zcrcjxidzyfnehebfnbq`) and
+  **staging** (`lziepvaoiwxxajvpvkwu`); the prod org→domain map resolves
+  `findyoursuitespot.com`. `VITE_BOOKING_SERVING_HOST=findyoursuitespot.com` is set
+  on Vercel for Production + Preview (only needed off-prod, where Origin isn't a
+  tenant domain).
+- **Verified in prod (2026-06-23):** live routes 200; `public-property`,
+  `public-availability` (incl. dated `availableUnitIds` filtering), and
+  `public-rates` all 200; `public-create-reservation` returns 200 (real test
+  bookings succeeded after the PR #3 fix). Edge logs clean for the SuiteSpot flow.
+  Note: the prod functions are **multi-tenant** — a `public-rates` 404 in the
+  shared logs is another org, not SuiteSpot (all 5 SuiteSpot room types have an
+  active rate plan).
 
 ---
 
@@ -173,3 +184,8 @@ Visitors hit `NET::ERR_CERT_COMMON_NAME_INVALID` ("Your connection is not privat
       canonical tag* report to speed up re-crawl (otherwise resolves on next natural crawl).
 - [ ] Consider moving DNS nameservers to Vercel (`ns1/ns2.vercel-dns.com`) for fully
       managed DNS — optional; current external records work.
+- [ ] **`feat/content-admin` (Phase 2.4-C)** — the login-gated `/admin` content editor
+      is still unmerged. It was branched before the booking merges, so landing it needs
+      a rebase onto `main` (expect a small `state.md` conflict; code files don't overlap).
+- [ ] Optional booking hardening: if a unit ever gets a `booking_com_name` that differs
+      from `name`, confirm rate plans stay keyed on `units.name` (the pricing key).

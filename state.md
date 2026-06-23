@@ -101,6 +101,11 @@ org's data.
   charged price always hit the same rate plan. Display labels still use
   `booking_com_name`. (PR #3 — fixed a 422 where the create path priced by
   `unit_type` while the read path priced by name.)
+- **Quote by `unit_id`:** `getRates` passes the selected `unit_id` (PR #4) so
+  `public-rates` resolves `room_type` from `units.name` server-side — the exact key
+  `public-create-reservation` prices on — making the quote and the booking share
+  one canonical path that can't desync. (`Locations` keeps a bare `room_type` for
+  its representative rate, with no specific unit.)
 - **Pricing parity:** the site's `calculateSubtotal/Tax/Total` are unchanged, fed
   by `ratePlan` + `rates` (from `public-rates`) and `unit.tax_percentage` (from
   `public-availability`). The server recomputes the price authoritatively

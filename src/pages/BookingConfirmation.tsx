@@ -1,11 +1,21 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { PublicNav } from "@/components/PublicNav";
 import { SEO } from "@/components/SEO";
 
+interface ConfirmationState {
+  bookingReference?: string;
+  totalPrice?: number;
+  currency?: string;
+}
+
 const BookingConfirmation = () => {
+  const location = useLocation();
+  const { bookingReference, totalPrice, currency } =
+    (location.state as ConfirmationState | null) || {};
+
   return (
     <div className="min-h-screen bg-background">
       <SEO
@@ -31,6 +41,26 @@ const BookingConfirmation = () => {
           <p className="text-lg text-muted-foreground mb-8">
             Thank you for choosing SuiteSpot. We've sent a confirmation email with all the details of your reservation.
           </p>
+
+          {(bookingReference || typeof totalPrice === "number") && (
+            <div className="bg-accent/5 border rounded-lg p-6 mb-8">
+              {bookingReference && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Booking reference</span>
+                  <span className="font-semibold text-foreground">{bookingReference}</span>
+                </div>
+              )}
+              {typeof totalPrice === "number" && (
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm text-muted-foreground">Total</span>
+                  <span className="font-bold text-foreground">
+                    {currency === "USD" || !currency ? "$" : `${currency} `}
+                    {totalPrice.toFixed(2)}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="bg-muted/30 rounded-lg p-6 mb-8 text-left">
             <h3 className="font-semibold text-foreground mb-3">What's Next?</h3>

@@ -1,133 +1,25 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarIcon, Users } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import type { DateRange } from "react-day-picker";
-import { supabase } from "@/integrations/supabase/client";
-import { usePropertySafe } from "@/lib/propertyContext";
 
 export const BookingWidget = () => {
   const navigate = useNavigate();
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [guests, setGuests] = useState<string>("2");
-  const [bookedDates, setBookedDates] = useState<Date[]>([]);
-  const [defaultPropertyId, setDefaultPropertyId] = useState<string | null>(null);
 
-  useEffect(() => {
-    supabase.from("properties").select("id").eq("is_default", true).maybeSingle()
-      .then(({ data }) => { if (data) setDefaultPropertyId(data.id); });
-  }, []);
-
-  useEffect(() => {
-    if (!defaultPropertyId) return;
-    const fetchBookedDates = async () => {
-      try {
-        // Fetch manually blocked dates
-        const { data: blockedDatesData, error: blockedError } = await supabase
-          .from("blocked_dates")
-          .select("blocked_date, unit_id");
-
-        if (blockedError) throw blockedError;
-
-        // Get all available units for the default property
-        const { data: allUnits } = await supabase
-          .from("units")
-          .select("id")
-          .eq("status", "available")
-          .eq("is_private", false)
-          .eq("property_id", defaultPropertyId);
-
-        const totalUnits = allUnits?.length || 0;
-        if (totalUnits === 0) return;
-
-        // Fetch reservation dates
-        const { data: reservations, error } = await supabase
-          .from("reservations")
-          .select("check_in_date, check_out_date, unit_id")
-          .eq("status", "confirmed");
-
-        if (error) throw error;
-
-        // Group reservations and blocks by date
-        const dateUnavailability = new Map<string, Set<string>>();
-        
-        // Add reservations to unavailability map
-        reservations?.forEach(res => {
-          const start = parseISO(res.check_in_date);
-          const end = parseISO(res.check_out_date);
-          
-          for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-            const dateStr = format(d, "yyyy-MM-dd");
-            if (!dateUnavailability.has(dateStr)) {
-              dateUnavailability.set(dateStr, new Set());
-            }
-            dateUnavailability.get(dateStr)?.add(res.unit_id);
-          }
-        });
-
-        // Add blocked dates to unavailability map
-        blockedDatesData?.forEach(block => {
-          const dateStr = block.blocked_date;
-          
-          if (!dateUnavailability.has(dateStr)) {
-            dateUnavailability.set(dateStr, new Set());
-          }
-          
-          if (block.unit_id === null) {
-            // If unit_id is null, block all units for this date
-            allUnits?.forEach(unit => {
-              dateUnavailability.get(dateStr)?.add(unit.id);
-            });
-          } else {
-            // Block specific unit
-            dateUnavailability.get(dateStr)?.add(block.unit_id);
-          }
-        });
-
-        // Find dates where all units are unavailable (booked or blocked)
-        const fullyUnavailableDates: Date[] = [];
-        dateUnavailability.forEach((unitIds, dateStr) => {
-          if (unitIds.size >= totalUnits) {
-            fullyUnavailableDates.push(parseISO(dateStr));
-          }
-        });
-
-        setBookedDates(fullyUnavailableDates);
-      } catch (error: any) {
-        console.error("Error fetching booked dates:", error);
-      }
-    };
-
-    fetchBookedDates();
-  }, []);
-
-  // Check if a date range contains any fully booked dates
-  const isRangeValid = (range: DateRange | undefined) => {
-    if (!range?.from || !range?.to) return true;
-    
-    const start = new Date(range.from);
-    const end = new Date(range.to);
-    
-    // Check each date in the range (excluding checkout date)
-    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-      const isBlocked = bookedDates.some(bookedDate => 
-        format(bookedDate, 'yyyy-MM-dd') === format(d, 'yyyy-MM-dd')
-      );
-      if (isBlocked) return false;
-    }
-    return true;
-  };
-
+  // This widget just collects dates + guests and hands off to /book, which
+  // resolves real availability via the Booking API (getAvailability). Per-date
+  // booked/blocked data is no longer exposed to the public site, so the
+  // calendar only disables past dates here.
   const handleDateSelect = (range: DateRange | undefined) => {
-    // Only set the range if it's valid (doesn't contain blocked dates)
-    if (isRangeValid(range)) {
-      setDateRange(range);
-    }
+    setDateRange(range);
   };
 
   const handleSearch = () => {
@@ -181,22 +73,10 @@ export const BookingWidget = () => {
                 mode="range"
                 selected={dateRange}
                 onSelect={handleDateSelect}
-                disabled={(date) => {
-                  const isPast = date < new Date();
-                  const isBooked = bookedDates.some(bookedDate => 
-                    format(bookedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-                  );
-                  return isPast || isBooked;
-                }}
+                disabled={(date) => date < new Date()}
                 initialFocus
                 numberOfMonths={1}
                 className="pointer-events-auto"
-                modifiers={{
-                  booked: bookedDates,
-                }}
-                modifiersClassNames={{
-                  booked: "bg-white text-muted-foreground opacity-60 cursor-not-allowed",
-                }}
               />
             </PopoverContent>
           </Popover>
@@ -224,22 +104,10 @@ export const BookingWidget = () => {
                 mode="range"
                 selected={dateRange}
                 onSelect={handleDateSelect}
-                disabled={(date) => {
-                  const isPast = date < new Date();
-                  const isBooked = bookedDates.some(bookedDate => 
-                    format(bookedDate, 'yyyy-MM-dd') === format(date, 'yyyy-MM-dd')
-                  );
-                  return isPast || isBooked;
-                }}
+                disabled={(date) => date < new Date()}
                 initialFocus
                 numberOfMonths={1}
                 className="pointer-events-auto"
-                modifiers={{
-                  booked: bookedDates,
-                }}
-                modifiersClassNames={{
-                  booked: "bg-white text-muted-foreground opacity-60 cursor-not-allowed",
-                }}
               />
             </PopoverContent>
           </Popover>

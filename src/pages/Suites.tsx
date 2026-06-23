@@ -3,10 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
 import { Wifi, Tv, Coffee, Wind, Users, Bed, Loader2, Camera } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { getAvailability } from "@/lib/bookingApi";
 import { content } from "@/integrations/content/client";
 import { useToast } from "@/hooks/use-toast";
-import { getDefaultPropertyId } from "@/lib/propertyContext";
 import { PublicNav } from "@/components/PublicNav";
 import { PublicFooter } from "@/components/PublicFooter";
 import { SEO } from "@/components/SEO";
@@ -74,33 +73,44 @@ const Suites = () => {
   const { toast } = useToast();
   const [units, setUnits] = useState<Unit[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const defaultPropertyId = getDefaultPropertyId();
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
   useEffect(() => {
-    if (!defaultPropertyId) return;
     const fetchUnits = async () => {
       try {
-        // Booking data (units) stays on the PMS; room-type photos now come from
-        // the dedicated content project (Decision #13). unit_photos retired.
-        const [unitsRes, rtPhotosRes] = await Promise.all([
-          supabase
-            .from("units")
-            .select("id, name, booking_com_name, unit_type, unit_number, unit_size, status, comments, photos, max_guests, beds, features, show_on_website, room_type_display_order")
-            .eq("status", "available")
-            .eq("is_private", false)
-            .eq("show_on_website", true)
-            .eq("property_id", defaultPropertyId)
-            .order("room_type_display_order"),
+        // Booking data (units) now comes from the Hostbase Booking API, which
+        // resolves the tenant server-side and returns the public room types.
+        // Room-type photos come from the dedicated content project (Decision #13).
+        const [availRes, rtPhotosRes] = await Promise.all([
+          getAvailability(),
           content
             .from("room_type_photos")
             .select("room_type_name, photo_url, display_order, is_cover")
             .order("display_order"),
         ]);
 
-        if (unitsRes.error) throw unitsRes.error;
+        // Map API units into the page's Unit shape and preserve room-type
+        // ordering. `comments`/`features` aren't exposed by the public API, so
+        // the page falls back to its built-in defaults for those.
+        const unitsData: Unit[] = [...availRes.units]
+          .sort((a, b) => (a.room_type_display_order ?? 0) - (b.room_type_display_order ?? 0))
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            booking_com_name: u.booking_com_name,
+            unit_type: u.unit_type,
+            unit_number: u.unit_number,
+            unit_size: u.unit_size,
+            status: u.status,
+            comments: null,
+            room_type_display_order: u.room_type_display_order ?? 0,
+            photos: u.photos,
+            max_guests: u.max_guests,
+            beds: u.beds,
+            features: null,
+          }));
 
         // Build photo lookup maps with cover info
         const rtPhotosByType: Record<string, { url: string; isCover: boolean }[]> = {};
@@ -111,8 +121,8 @@ const Suites = () => {
 
         // unit_photos retired in the PMS→content split; no per-unit overrides.
         const unitPhotosByUnit: Record<string, string[]> = {};
-        
-        const grouped = (unitsRes.data || []).reduce((acc, unit) => {
+
+        const grouped = unitsData.reduce((acc, unit) => {
           const type = unit.unit_type || "Other";
           if (!acc[type]) acc[type] = [];
           acc[type].push(unit);
@@ -162,7 +172,7 @@ const Suites = () => {
 
     fetchUnits();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toast, defaultPropertyId]);
+  }, [toast]);
 
   const openLightbox = (photos: string[], index: number = 0) => {
     setLightboxPhotos(photos);

@@ -161,9 +161,18 @@ export const getAvailability = (params: {
   unit_type?: string;
 } = {}) => post<AvailabilityResponse>('public-availability', params);
 
-/** Nightly rates + rate-plan meta. date_to is the checkout date (exclusive). */
+/**
+ * Nightly rates + rate-plan meta. date_to is the checkout date (exclusive).
+ *
+ * Pass `unit_id` when quoting a specific unit: the server then resolves the
+ * room-type from `units.name` — the same key `public-create-reservation` prices
+ * on — so the quoted (read) total and the booked (write) total can't desync even
+ * if `booking_com_name` diverges from `name`. Use a bare `room_type` only when
+ * there's no specific unit (e.g. a representative rate on Locations).
+ */
 export const getRates = (params: {
-  room_type: string;
+  room_type?: string;
+  unit_id?: string;
   date_from: string;
   date_to: string;
 }) => post<RatesResponse>('public-rates', params);

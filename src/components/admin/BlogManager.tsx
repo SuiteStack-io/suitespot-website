@@ -15,13 +15,13 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUpload } from './ImageUpload';
+import { MarkdownEditor } from './MarkdownEditor';
 import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 
 interface BlogPost {
@@ -209,112 +209,170 @@ export const BlogManager = () => {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Edit post' : 'New post'}</DialogTitle>
-            <DialogDescription>
-              Content supports markdown: <code>## H2</code>, <code>### H3</code>,{' '}
-              <code>**bold**</code>, <code>*italic*</code>, <code>- bullet</code>, numbered lists,
-              and <code>[link](url)</code>.
-            </DialogDescription>
+            <DialogTitle className="font-playfair text-2xl">
+              {editingId ? 'Edit Blog Post' : 'Create New Blog Post'}
+            </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="h1">Title (H1) *</Label>
-              <Input
-                id="h1"
-                value={draft.h1_title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="h2">Subtitle (H2)</Label>
-              <Input
-                id="h2"
-                value={draft.h2_subtitle ?? ''}
-                onChange={(e) => update({ h2_subtitle: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="slug">Slug *</Label>
-              <Input
-                id="slug"
-                value={draft.slug}
-                onChange={(e) => {
-                  setSlugTouched(true);
-                  update({ slug: slugify(e.target.value) });
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Featured image</Label>
-              <ImageUpload
-                bucket="property-photos"
-                pathPrefix="blog"
-                value={draft.featured_image_url}
-                onChange={(url) => update({ featured_image_url: url })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="excerpt">Excerpt</Label>
-              <Textarea
-                id="excerpt"
-                rows={2}
-                value={draft.excerpt ?? ''}
-                onChange={(e) => update({ excerpt: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="content">Content (markdown)</Label>
-              <Textarea
-                id="content"
-                rows={12}
-                className="font-mono text-sm"
-                value={draft.content ?? ''}
-                onChange={(e) => update({ content: e.target.value })}
-              />
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-6">
+            {/* SEO Fields */}
+            <section className="space-y-4">
+              <h3 className="border-b border-border pb-2 text-base font-semibold">SEO Fields</h3>
+
               <div className="space-y-2">
-                <Label htmlFor="meta_title">Meta title</Label>
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="h1">
+                    H1 Heading <span className="text-destructive">*</span>
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    {draft.h1_title.length}/60 chars
+                  </span>
+                </div>
                 <Input
-                  id="meta_title"
-                  value={draft.meta_title ?? ''}
-                  onChange={(e) => update({ meta_title: e.target.value })}
+                  id="h1"
+                  maxLength={60}
+                  placeholder="Main page title (appears as H1)"
+                  value={draft.h1_title}
+                  onChange={(e) => handleTitleChange(e.target.value)}
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="published_at">Published date</Label>
+                <div className="flex items-baseline justify-between">
+                  <Label htmlFor="h2">H2 Subheading</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {(draft.h2_subtitle ?? '').length}/120 chars
+                  </span>
+                </div>
                 <Input
-                  id="published_at"
-                  type="datetime-local"
-                  value={toLocalInput(draft.published_at)}
-                  onChange={(e) => update({ published_at: fromLocalInput(e.target.value) })}
+                  id="h2"
+                  maxLength={120}
+                  placeholder="Secondary heading (appears as H2)"
+                  value={draft.h2_subtitle ?? ''}
+                  onChange={(e) => update({ h2_subtitle: e.target.value })}
                 />
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="meta_description">Meta description</Label>
-              <Textarea
-                id="meta_description"
-                rows={2}
-                value={draft.meta_description ?? ''}
-                onChange={(e) => update({ meta_description: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={draft.status} onValueChange={(v) => update({ status: v })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="published">Published</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="slug">
+                  URL Slug <span className="text-destructive">*</span>
+                </Label>
+                <div className="flex items-center rounded-md border border-input focus-within:ring-2 focus-within:ring-ring">
+                  <span className="select-none border-r border-input px-3 py-2 text-sm text-muted-foreground">
+                    /blog/
+                  </span>
+                  <input
+                    id="slug"
+                    placeholder="url-friendly-slug"
+                    value={draft.slug}
+                    onChange={(e) => {
+                      setSlugTouched(true);
+                      update({ slug: slugify(e.target.value) });
+                    }}
+                    className="flex-1 rounded-r-md bg-background px-3 py-2 text-sm outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="meta_title">
+                    Meta Title{' '}
+                    <span className="text-xs font-normal text-muted-foreground">(defaults to H1)</span>
+                  </Label>
+                  <Input
+                    id="meta_title"
+                    placeholder="Custom SEO title"
+                    value={draft.meta_title ?? ''}
+                    onChange={(e) => update({ meta_title: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between">
+                    <Label htmlFor="meta_description">Meta Description</Label>
+                    <span className="text-xs text-muted-foreground">
+                      {(draft.meta_description ?? '').length}/160
+                    </span>
+                  </div>
+                  <Input
+                    id="meta_description"
+                    maxLength={160}
+                    placeholder="SEO description"
+                    value={draft.meta_description ?? ''}
+                    onChange={(e) => update({ meta_description: e.target.value })}
+                  />
+                </div>
+              </div>
+            </section>
+
+            {/* Content */}
+            <section className="space-y-4">
+              <h3 className="border-b border-border pb-2 text-base font-semibold">Content</h3>
+
+              <div className="space-y-2">
+                <Label htmlFor="excerpt">
+                  Excerpt{' '}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    (for cards &amp; previews)
+                  </span>
+                </Label>
+                <Textarea
+                  id="excerpt"
+                  rows={3}
+                  placeholder="Brief summary of the post…"
+                  value={draft.excerpt ?? ''}
+                  onChange={(e) => update({ excerpt: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Main Content</Label>
+                <MarkdownEditor
+                  value={draft.content ?? ''}
+                  onChange={(v) => update({ content: v })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Featured Image</Label>
+                <ImageUpload
+                  bucket="property-photos"
+                  pathPrefix="blog"
+                  value={draft.featured_image_url}
+                  onChange={(url) => update({ featured_image_url: url })}
+                />
+              </div>
+            </section>
+
+            {/* Publishing */}
+            <section className="space-y-4">
+              <h3 className="border-b border-border pb-2 text-base font-semibold">Publishing</h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={draft.status} onValueChange={(v) => update({ status: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="published">Published</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="published_at">Published date</Label>
+                  <Input
+                    id="published_at"
+                    type="datetime-local"
+                    value={toLocalInput(draft.published_at)}
+                    onChange={(e) => update({ published_at: fromLocalInput(e.target.value) })}
+                  />
+                </div>
+              </div>
+            </section>
           </div>
 
           <DialogFooter>

@@ -12,8 +12,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Progress } from "@/components/ui/progress";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { supabase } from "@/integrations/supabase/client";
-import { getDefaultPropertyId } from "@/lib/propertyContext";
+import { getPublicProperty, getAvailability, getRates, createReservation } from "@/lib/bookingApi";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO, subDays } from "date-fns";
 import { Dialog, DialogContent, DialogClose, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,7 +24,6 @@ import visaLogo from "@/assets/visa-logo.png";
 import mastercardLogo from "@/assets/mastercard-logo.jpg";
 import type { DateRange } from "react-day-picker";
 import { PublicNav } from "@/components/PublicNav";
-import { getActiveRate } from "@/lib/rateResolver";
 
 const NATIONALITIES = [
   "Afghanistan", "Albania", "Algeria", "United States", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia",
@@ -155,11 +153,9 @@ const BookingFlow = () => {
   const [units, setUnits] = useState<Unit[]>([]);
   const [groupedUnitTypes, setGroupedUnitTypes] = useState<GroupedUnitType[]>([]);
   const [isLoadingUnits, setIsLoadingUnits] = useState(true);
-  const [bookedDates, setBookedDates] = useState<Date[]>([]);
   const [preSelectedUnitId, setPreSelectedUnitId] = useState<string | null>(null);
   const [preSelectedUnitType, setPreSelectedUnitType] = useState<string | null>(null);
-  const defaultPropertyId = getDefaultPropertyId();
-  const [defaultPropertyName] = useState<string>("SuiteSpot");
+  const [defaultPropertyName, setDefaultPropertyName] = useState<string>("SuiteSpot");
   const [selectedUnitType, setSelectedUnitType] = useState<string>("");
   const [ratePlanRate, setRatePlanRate] = useState<RatePlanRateState | null>(null);
   const [dailyRates, setDailyRates] = useState<DailyRate[]>([]);
@@ -276,160 +272,55 @@ const BookingFlow = () => {
     }
   }, [searchParams]);
 
-  // Fetch available units based on selected dates
+  // Resolve the property name for the heading (tenant resolved server-side).
   useEffect(() => {
-    if (!defaultPropertyId) return;
+    getPublicProperty()
+      .then(({ property }) => {
+        if (property?.name) setDefaultPropertyName(property.name);
+      })
+      .catch(() => {
+        /* heading falls back to "SuiteSpot" */
+      });
+  }, []);
+
+  // Fetch available units based on selected dates, via the Booking API. The API
+  // resolves the tenant server-side and returns the org's units plus
+  // availableUnitIds (the subset bookable for the date range, or null when no
+  // dates are given). We filter/group exactly as before — only the data source
+  // changed.
+  useEffect(() => {
     const fetchAvailableUnits = async () => {
       setIsLoadingUnits(true);
       try {
-        // If a specific unit is pre-selected, fetch only that unit
+        const hasDates = !!(dateRange?.from && dateRange?.to);
+        const params: { date_from?: string; date_to?: string; unit_type?: string } = {};
+        if (hasDates) {
+          params.date_from = format(dateRange!.from!, "yyyy-MM-dd");
+          // date_to is the checkout date (exclusive) — pass it directly.
+          params.date_to = format(dateRange!.to!, "yyyy-MM-dd");
+        }
+        if (preSelectedUnitType) params.unit_type = preSelectedUnitType;
+
+        const { units: apiUnits, availableUnitIds } = await getAvailability(params);
+
+        // availableUnitIds is null when no dates were given (all units are
+        // candidates); otherwise a unit is bookable only if it's in the set.
+        const isAvailable = (id: string) =>
+          availableUnitIds === null || availableUnitIds.includes(id);
+
         if (preSelectedUnitId) {
-          const { data: unit, error: unitError } = await supabase
-            .from("units")
-            .select("id, name, booking_com_name, unit_type, unit_number, status, beds, baths, max_guests, unit_size, sofa_bed, tax_percentage, photos")
-            .eq("id", preSelectedUnitId)
-            .eq("is_private", false)
-            .eq("property_id", defaultPropertyId)
-            .single();
-
-          if (unitError) throw unitError;
-          setUnits(unit ? [unit] : []);
+          const unit = apiUnits.find((u) => u.id === preSelectedUnitId);
+          setUnits(unit && isAvailable(unit.id) ? [unit] : []);
         } else if (preSelectedUnitType) {
-          // If a unit type is pre-selected, fetch all units of that type
-          let query = supabase
-            .from("units")
-            .select("id, name, booking_com_name, unit_type, unit_number, status, beds, baths, max_guests, unit_size, sofa_bed, tax_percentage, photos")
-            .eq("status", "available")
-            .eq("unit_type", preSelectedUnitType)
-            .eq("is_private", false)
-            .eq("property_id", defaultPropertyId)
-            .order("unit_number");
-
-          const { data: typeUnits, error: unitsError } = await query;
-          if (unitsError) throw unitsError;
-
-          // If dates are selected, filter by availability
-          if (dateRange?.from && dateRange?.to) {
-            const { data: reservations, error: reservationsError } = await supabase
-              .from("reservations")
-              .select("unit_id, check_in_date, check_out_date")
-              .gte("check_out_date", format(dateRange.from, "yyyy-MM-dd"))
-              .lte("check_in_date", format(dateRange.to, "yyyy-MM-dd"))
-              .neq("status", "cancelled");
-
-            if (reservationsError) throw reservationsError;
-
-            const { data: blockedDatesData, error: blocksError } = await supabase
-              .from("blocked_dates")
-              .select("blocked_date, unit_id")
-              .gte("blocked_date", format(dateRange.from, "yyyy-MM-dd"))
-              .lt("blocked_date", format(dateRange.to, "yyyy-MM-dd"));
-
-            if (blocksError) throw blocksError;
-
-            const requestedCheckIn = format(dateRange.from, "yyyy-MM-dd");
-            const requestedCheckOut = format(dateRange.to, "yyyy-MM-dd");
-            
-            const bookedUnitIds = new Set(
-              reservations
-                ?.filter(r => {
-                  return r.check_in_date < requestedCheckOut && r.check_out_date > requestedCheckIn;
-                })
-                .map(r => r.unit_id) || []
-            );
-
-            blockedDatesData?.forEach(block => {
-              if (block.unit_id === null) {
-                typeUnits?.forEach(unit => bookedUnitIds.add(unit.id));
-              } else {
-                bookedUnitIds.add(block.unit_id);
-              }
-            });
-            
-            const availableUnits = typeUnits?.filter(unit => !bookedUnitIds.has(unit.id)) || [];
-            setUnits(availableUnits);
-            
-            // Auto-select first available unit of this type
-            if (availableUnits.length > 0) {
-              setSelectedUnit(availableUnits[0].id);
-            }
-          } else {
-            setUnits(typeUnits || []);
-            // Auto-select first unit of this type
-            if (typeUnits && typeUnits.length > 0) {
-              setSelectedUnit(typeUnits[0].id);
-            }
+          const typeUnits = apiUnits.filter((u) => isAvailable(u.id));
+          setUnits(typeUnits);
+          if (typeUnits.length > 0) {
+            setSelectedUnit(typeUnits[0].id);
           }
         } else {
-          // Get all units if no pre-selection
-          const { data: allUnits, error: unitsError } = await supabase
-            .from("units")
-            .select("id, name, booking_com_name, unit_type, unit_number, status, beds, baths, max_guests, unit_size, sofa_bed, tax_percentage, photos")
-            .eq("status", "available")
-            .eq("is_private", false)
-            .eq("property_id", defaultPropertyId)
-            .order("name");
-
-          if (unitsError) throw unitsError;
-
-          // If dates are selected, filter by availability
-          if (dateRange?.from && dateRange?.to) {
-            const { data: reservations, error: reservationsError } = await supabase
-              .from("reservations")
-              .select("unit_id, check_in_date, check_out_date")
-              .gte("check_out_date", format(dateRange.from, "yyyy-MM-dd"))
-              .lte("check_in_date", format(dateRange.to, "yyyy-MM-dd"))
-              .neq("status", "cancelled");
-
-            if (reservationsError) throw reservationsError;
-
-            // Also fetch blocked dates that overlap with the requested range
-            const { data: blockedDatesData, error: blocksError } = await supabase
-              .from("blocked_dates")
-              .select("blocked_date, unit_id")
-              .gte("blocked_date", format(dateRange.from, "yyyy-MM-dd"))
-              .lt("blocked_date", format(dateRange.to, "yyyy-MM-dd"));
-
-            if (blocksError) throw blocksError;
-
-            // Filter out units that have conflicting reservations
-            const requestedCheckIn = format(dateRange.from, "yyyy-MM-dd");
-            const requestedCheckOut = format(dateRange.to, "yyyy-MM-dd");
-            
-            const bookedUnitIds = new Set(
-              reservations
-                ?.filter(r => {
-                  // A reservation conflicts if:
-                  // - Its check-in is before our check-out AND
-                  // - Its check-out is after our check-in (same-day checkout/checkin is allowed)
-                  return r.check_in_date < requestedCheckOut && r.check_out_date > requestedCheckIn;
-                })
-                .map(r => r.unit_id) || []
-            );
-
-            // Add units that are manually blocked during the requested dates
-            blockedDatesData?.forEach(block => {
-              // If unit_id is null, block all units
-              if (block.unit_id === null) {
-                allUnits?.forEach(unit => bookedUnitIds.add(unit.id));
-              } else {
-                bookedUnitIds.add(block.unit_id);
-              }
-            });
-            
-            const availableUnits = allUnits?.filter(unit => !bookedUnitIds.has(unit.id)) || [];
-            setUnits(availableUnits);
-            
-            // Group units by type for the dropdown
-            const grouped = groupUnitsByType(availableUnits);
-            setGroupedUnitTypes(grouped);
-          } else {
-            setUnits(allUnits || []);
-            
-            // Group units by type for the dropdown
-            const grouped = groupUnitsByType(allUnits || []);
-            setGroupedUnitTypes(grouped);
-          }
+          const availableUnits = apiUnits.filter((u) => isAvailable(u.id));
+          setUnits(availableUnits);
+          setGroupedUnitTypes(groupUnitsByType(availableUnits));
         }
       } catch (error: any) {
         toast({
@@ -443,7 +334,7 @@ const BookingFlow = () => {
     };
 
     fetchAvailableUnits();
-  }, [toast, dateRange, preSelectedUnitId, preSelectedUnitType, defaultPropertyId]);
+  }, [toast, dateRange, preSelectedUnitId, preSelectedUnitType]);
   
   // Helper function to group units by type
   const groupUnitsByType = (unitsList: Unit[]): GroupedUnitType[] => {
@@ -471,187 +362,36 @@ const BookingFlow = () => {
     return Array.from(groupMap.values());
   };
 
-  // Fetch booked dates for calendar display
-  useEffect(() => {
-    const fetchBookedDates = async () => {
-      try {
-        // If we have a pre-selected unit, only show blocked dates for that unit
-        if (preSelectedUnitId) {
-          const { data: reservations, error } = await supabase
-            .from("reservations")
-            .select("check_in_date, check_out_date")
-            .eq("unit_id", preSelectedUnitId)
-            .neq("status", "cancelled");
-
-          if (error) throw error;
-
-          // Also fetch manually blocked dates for this unit
-          const { data: manualBlocks, error: blocksError } = await supabase
-            .from("blocked_dates")
-            .select("blocked_date")
-            .eq("unit_id", preSelectedUnitId);
-
-          if (blocksError) throw blocksError;
-
-          // Get all dates that are booked for this specific unit
-          const blockedDates: Date[] = [];
-          
-          reservations?.forEach(res => {
-            const start = new Date(res.check_in_date + 'T00:00:00');
-            const end = new Date(res.check_out_date + 'T00:00:00');
-            
-            // Block all dates from check-in through the day before checkout
-            // Checkout day is available for new check-ins
-            const current = new Date(start);
-            while (current < end) {
-              blockedDates.push(new Date(current));
-              current.setDate(current.getDate() + 1);
-            }
-          });
-
-          // Add manually blocked dates
-          manualBlocks?.forEach(block => {
-            blockedDates.push(new Date(block.blocked_date + 'T00:00:00'));
-          });
-
-          setBookedDates(blockedDates);
-        } else {
-          // Get all dates that are fully booked (all units booked)
-          const { data: reservations, error } = await supabase
-            .from("reservations")
-            .select("check_in_date, check_out_date, unit_id")
-            .neq("status", "cancelled");
-
-          if (error) throw error;
-
-          // Fetch manually blocked dates
-          const { data: blockedDatesData, error: blocksError } = await supabase
-            .from("blocked_dates")
-            .select("blocked_date, unit_id");
-
-          if (blocksError) throw blocksError;
-
-          const { data: allUnits } = await supabase
-            .from("units")
-            .select("id")
-            .eq("status", "available");
-
-          const totalUnits = allUnits?.length || 0;
-          if (totalUnits === 0) return;
-
-          // Group reservations by date
-          const dateBookings = new Map<string, Set<string>>();
-          
-          reservations?.forEach(res => {
-            const start = parseISO(res.check_in_date);
-            const end = parseISO(res.check_out_date);
-            
-            for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-              const dateStr = format(d, "yyyy-MM-dd");
-              if (!dateBookings.has(dateStr)) {
-                dateBookings.set(dateStr, new Set());
-              }
-              dateBookings.get(dateStr)?.add(res.unit_id);
-            }
-          });
-
-          // Add manually blocked dates
-          blockedDatesData?.forEach(block => {
-            const dateStr = block.blocked_date;
-            if (!dateBookings.has(dateStr)) {
-              dateBookings.set(dateStr, new Set());
-            }
-            // If unit_id is null, it means all units are blocked for this date
-            if (block.unit_id === null) {
-              allUnits?.forEach(unit => {
-                dateBookings.get(dateStr)?.add(unit.id);
-              });
-            } else {
-              dateBookings.get(dateStr)?.add(block.unit_id);
-            }
-          });
-
-          // Find dates where all units are booked
-          const fullyBookedDates: Date[] = [];
-          dateBookings.forEach((unitIds, dateStr) => {
-            if (unitIds.size >= totalUnits) {
-              fullyBookedDates.push(parseISO(dateStr));
-            }
-          });
-
-          setBookedDates(fullyBookedDates);
-        }
-      } catch (error: any) {
-        console.error("Error fetching booked dates:", error);
-      }
-    };
-
-    fetchBookedDates();
-  }, [preSelectedUnitId]);
-
-  // Fetch rate plan pricing when unit or dates change
+  // Fetch rate plan pricing + nightly rates when unit or dates change. A single
+  // getRates() call replaces the former getActiveRate + dynamic-price-batch.
+  // The API requires both dates (date_to is checkout, exclusive); the pricing UI
+  // only renders with a full range anyway, so we no-op until both are set.
   useEffect(() => {
     const fetchRate = async () => {
       const unit = units.find(u => u.id === selectedUnit);
       const roomType = unit?.booking_com_name || unit?.name || unit?.unit_type;
-      if (!roomType || !dateRange?.from) {
+      if (!roomType || !dateRange?.from || !dateRange?.to) {
         setRatePlanRate(null);
         setDailyRates([]);
         return;
       }
       try {
-        const result = await getActiveRate(roomType, dateRange.from, selectedUnit);
-        if (result) {
-          // Also fetch the extra_adult_rate from the matched rate plan
-          const { data: plan } = await supabase
-            .from('rate_plans')
-            .select('extra_adult_rate')
-            .eq('id', result.ratePlanId)
-            .single();
+        const result = await getRates({
+          room_type: roomType,
+          date_from: format(dateRange.from, 'yyyy-MM-dd'),
+          date_to: format(dateRange.to, 'yyyy-MM-dd'),
+        });
 
-          setRatePlanRate({
-            weekdayRate: result.weekdayRate,
-            weekendRate: result.weekendRate,
-            minStay: result.minStay,
-            ratePlanName: result.ratePlanName,
-            ratePlanId: result.ratePlanId,
-            extraAdultRate: plan?.extra_adult_rate ?? 50,
-          });
-
-          // Fetch dynamic pricing if dates are fully selected
-          if (dateRange?.to) {
-            const dateFrom = format(dateRange.from, 'yyyy-MM-dd');
-            const dateTo = format(subDays(dateRange.to, 1), 'yyyy-MM-dd');
-            try {
-              const { data: batchResult, error: batchError } = await supabase.functions.invoke(
-                'calculate-dynamic-price-batch',
-                {
-                  body: {
-                    property_id: defaultPropertyId,
-                    room_type: roomType,
-                    rate_plan_id: result.ratePlanId,
-                    date_from: dateFrom,
-                    date_to: dateTo,
-                  },
-                }
-              );
-              if (!batchError && batchResult?.success && batchResult.rates) {
-                setDailyRates(
-                  batchResult.rates.map((r: any) => ({ date: r.target_date, finalRate: r.final_rate, baseRate: r.base_rate }))
-                );
-              } else {
-                setDailyRates([]);
-              }
-            } catch {
-              setDailyRates([]);
-            }
-          } else {
-            setDailyRates([]);
-          }
-        } else {
-          setRatePlanRate(null);
-          setDailyRates([]);
-        }
+        setRatePlanRate({
+          weekdayRate: result.ratePlan.weekdayRate,
+          weekendRate: result.ratePlan.weekendRate,
+          minStay: result.ratePlan.minStay,
+          ratePlanName: result.ratePlan.ratePlanName,
+          ratePlanId: result.ratePlan.ratePlanId,
+          extraAdultRate: result.ratePlan.extraAdultRate ?? 50,
+        });
+        // { date, finalRate, baseRate } already matches our DailyRate shape.
+        setDailyRates(result.rates);
       } catch (err) {
         console.error('Error fetching rate plan:', err);
         setRatePlanRate(null);
@@ -671,28 +411,12 @@ const BookingFlow = () => {
     }
   }, []);
 
-  // Check if a date range contains any fully booked dates
-  const isRangeValid = (range: DateRange | undefined) => {
-    if (!range?.from || !range?.to) return true;
-    
-    const start = new Date(range.from);
-    const end = new Date(range.to);
-    
-    // Check each date in the range (excluding checkout date)
-    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
-      const isBlocked = bookedDates.some(bookedDate => 
-        format(bookedDate, 'yyyy-MM-dd') === format(d, 'yyyy-MM-dd')
-      );
-      if (isBlocked) return false;
-    }
-    return true;
-  };
-
+  // Per-date booked/blocked data is no longer exposed to the public site.
+  // Availability is enforced after a range is chosen: getAvailability returns
+  // the bookable units (availableUnitIds) for the selected dates, and the suite
+  // dropdown shows "no suites available" when the range is fully booked.
   const handleDateSelect = (range: DateRange | undefined) => {
-    // Only set the range if it's valid (doesn't contain blocked dates)
-    if (isRangeValid(range)) {
-      setDateRange(range);
-    }
+    setDateRange(range);
   };
 
   const updateGuestFirstName = (index: number, value: string) => {
@@ -920,13 +644,11 @@ const BookingFlow = () => {
 
     try {
       const validGuestNames = combinedNames.filter(n => n.trim());
-      
-      // Get unit details for email
-      const selectedUnitDetails = units.find(u => u.id === selectedUnit);
-      const unitName = selectedUnitDetails ? `${selectedUnitDetails.name} ${selectedUnitDetails.unit_number || ''}`.trim() : 'Unit';
-      const unitType = selectedUnitDetails?.unit_type || '';
 
-      const { data: insertedReservation, error } = await supabase.from("reservations").insert({
+      // The server recomputes the price authoritatively and ignores any client
+      // total, so we send only the booking fields (no total_price). It also
+      // fires the reservation-notification email.
+      const result = await createReservation({
         unit_id: selectedUnit,
         check_in_date: format(dateRange.from, "yyyy-MM-dd"),
         check_out_date: format(dateRange.to, "yyyy-MM-dd"),
@@ -935,63 +657,24 @@ const BookingFlow = () => {
         guest_genders: guestGenders.slice(0, validGuestNames.length),
         adults,
         children,
-        number_of_guests: adults + children,
         contact_email: email,
         contact_phone: `${countryCode}${phone}`,
         guest_nationality: nationality,
         notes,
-        status: "confirmed",
-        source: "direct website",
-        booking_reference: `WEB-${Date.now()}`,
-        channel: "Direct Website",
-        price_per_night: dailyRates.length > 0
-          ? Math.round(dailyRates.reduce((sum, r) => sum + r.finalRate, 0) / dailyRates.length)
-          : (ratePlanRate?.weekdayRate || 0),
-        total_price: calculateTotalPrice(),
-        commission_rate: 0,
-        commission_amount: 0,
-        net_revenue: calculateTotalPrice(),
-        currency: "USD",
       });
-
-      if (error) throw error;
-
-      // Send email notification
-      const bookingReference = `WEB-${Date.now()}`;
-      try {
-        await supabase.functions.invoke('send-reservation-notification', {
-          body: {
-            reservationId: bookingReference,
-            guestNames: validGuestNames,
-            checkIn: format(dateRange.from, "yyyy-MM-dd"),
-            checkOut: format(dateRange.to, "yyyy-MM-dd"),
-            unitName,
-            unitType,
-            totalPrice: calculateTotalPrice(),
-            subtotal: calculateSubtotal(),
-            taxAmount: calculateTax(),
-            taxPercentage: units.find(u => u.id === selectedUnit)?.tax_percentage || 14,
-            numberOfGuests: adults + children,
-            adults,
-            children,
-            source: "direct website",
-            notes: notes || null,
-            guestNationality: nationality || null,
-            customerEmail: email,
-            customerPhone: phone,
-          },
-        });
-        console.log('Email notification sent successfully');
-      } catch (emailError) {
-        console.error('Failed to send email notification:', emailError);
-      }
 
       toast({
         title: "Booking Confirmed!",
         description: "We've received your reservation. Check your email for confirmation.",
       });
 
-      navigate("/booking-confirmation");
+      navigate("/booking-confirmation", {
+        state: {
+          bookingReference: result.booking_reference,
+          totalPrice: result.total_price,
+          currency: result.currency,
+        },
+      });
     } catch (error: any) {
       toast({
         title: "Booking Failed",
@@ -1158,21 +841,9 @@ const BookingFlow = () => {
                         mode="range"
                         selected={dateRange}
                         onSelect={handleDateSelect}
-                        disabled={(date) => {
-                          const isPast = date < new Date();
-                          const isFullyBooked = bookedDates.some(
-                            bookedDate => format(bookedDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
-                          );
-                          return isPast || isFullyBooked;
-                        }}
+                        disabled={(date) => date < new Date()}
                         numberOfMonths={1}
                         className="rounded-md border pointer-events-auto"
-                        modifiers={{
-                          booked: bookedDates
-                        }}
-                        modifiersClassNames={{
-                          booked: "bg-white text-muted-foreground opacity-60 cursor-not-allowed"
-                        }}
                       />
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 # Project State — SuiteSpot Website
 
-_Last updated: 2026-06-14_
+_Last updated: 2026-06-23_
 
 Public marketing & booking website for **SuiteSpot Hospitality** (Egypt). Single-page
 React app deployed on Vercel at **https://www.findyoursuitespot.com**.
@@ -15,7 +15,7 @@ React app deployed on Vercel at **https://www.findyoursuitespot.com**.
 | Routing | `react-router-dom` v7 (client-side SPA) |
 | Styling | Tailwind CSS 3 + `tailwindcss-animate`, `@tailwindcss/typography` |
 | UI components | Radix UI primitives + shadcn-style wrappers in `src/components/ui/` |
-| Data / backend | Supabase (`@supabase/supabase-js`) |
+| Data / backend | Dedicated **content** Supabase project (`@supabase/supabase-js`) + the **PMS** reached only via the **Hostbase Booking API** (Edge Functions) — see [Booking API repoint](#booking-api-repoint-phase-24-b) |
 | Data fetching | TanStack React Query |
 | Forms | `react-hook-form` + `zod` + `@hookform/resolvers` |
 | SEO | `react-helmet-async` (per-route meta via `src/components/SEO.tsx`) |
@@ -57,7 +57,8 @@ plus `Toaster` (shadcn) and `Sonner` toasts.
 - `src/components/ui/` — shadcn/Radix UI primitives.
 - `src/integrations/supabase/` — `client.ts` (auto-generated client) + `types.ts`
   (generated DB types). **Do not hand-edit `client.ts`.**
-- `src/lib/` — `auth.tsx`, `propertyContext.tsx`, `rateResolver.ts`, `utils.ts`.
+- `src/lib/` — `auth.tsx`, `propertyContext.tsx`, `bookingApi.ts` (typed Booking API
+  client), `utils.ts`. (`rateResolver.ts` removed — replaced by the Booking API.)
 - `src/hooks/` — `use-mobile`, `use-toast`.
 - `public/` — `robots.txt`, `sitemap.xml`, `favicon.png`, fonts, slideshow images, icons.
 
@@ -67,10 +68,51 @@ plus `Toaster` (shadcn) and `Sonner` toasts.
 
 | Var | Required | Notes |
 |---|---|---|
-| `VITE_SUPABASE_URL` | **Yes** | App crashes at startup without it |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | **Yes** | Supabase anon/publishable key |
+| `VITE_CONTENT_SUPABASE_URL` | **Yes** | Content project URL (blog/FAQ/slideshows/photos) |
+| `VITE_CONTENT_SUPABASE_ANON_KEY` | **Yes** | Content project anon/publishable key |
+| `VITE_SUPABASE_URL` | **Yes** | PMS project URL — also the **Booking API base** (`${VITE_SUPABASE_URL}/functions/v1`). App crashes at startup without it |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | **Yes** | PMS anon key. No longer used for booking reads, but keep set so import doesn't throw |
+| `VITE_BOOKING_SERVING_HOST` | No | Booking API tenant fallback for localhost/preview (Origin isn't a tenant domain there). Set to `findyoursuitespot.com`. Ignored in prod |
 | `VITE_GOOGLE_MAPS_API_KEY` | No | Map renders blank without it |
-| `VITE_DEFAULT_PROPERTY_ID` | No | Falls back to empty string |
+| `VITE_DEFAULT_PROPERTY_ID` | No | Legacy/optional — Booking API resolves the property server-side |
+
+---
+
+## Booking API repoint (Phase 2.4-B)
+
+Branch `feat/booking-api`. The public site no longer queries the PMS booking
+tables directly with the anon key. All booking data flows through **four Hostbase
+Edge Functions** at `${VITE_SUPABASE_URL}/functions/v1` (POST, JSON,
+`verify_jwt=false` — no apikey/JWT). The functions resolve the tenant from the
+request **Origin** (with an optional `serving_host` body fallback for
+localhost/preview) and return only that org's data.
+
+- **Client:** `src/lib/bookingApi.ts` — typed `post()` helper that injects
+  `serving_host`, throws `BookingApiError` on non-2xx. Exports
+  `getPublicProperty()`, `getAvailability()`, `getRates()`, `createReservation()`.
+- **Repointed files:** `BookingFlow.tsx` (availability + rates + reservation),
+  `BookingWidget.tsx` (date/guest hand-off only), `Locations.tsx` (property
+  marker + representative rate), `Suites.tsx` (`units` → `getAvailability`,
+  keeps the content `room_type_photos` read). `rateResolver.ts` deleted.
+- **Pricing parity:** the site's `calculateSubtotal/Tax/Total` are unchanged, fed
+  by `ratePlan` + `rates` (from `public-rates`) and `unit.tax_percentage` (from
+  `public-availability`). The server recomputes the price authoritatively
+  (`(Σ nightly rate + third-guest fee when adults===3) × (1 + tax%)`) and
+  **ignores any client total** — the booking sends no `total_price`. Changing the
+  site formula requires changing the PMS `public-create-reservation` too.
+- **Behavior change:** per-date booked/blocked data is no longer exposed to the
+  public site, so the calendars only disable **past** dates. Availability is
+  enforced after a range is picked — `getAvailability` returns `availableUnitIds`
+  (the bookable subset) and the suite dropdown shows "no suites available" when a
+  range is fully booked. Server returns `409` as the final backstop.
+- **Prod-ready:** all four functions are live on **prod** and the prod
+  org→domain map resolves, so a Vercel preview pointed at prod
+  (`VITE_SUPABASE_URL`=prod, `VITE_BOOKING_SERVING_HOST=findyoursuitespot.com`)
+  works end-to-end. They're also on staging (`lziepvaoiwxxajvpvkwu`), where the
+  contract was verified (property, availability, rates, dated `availableUnitIds`,
+  400 on bad create).
+- `npm run build` passes. Verify the full flow on a Vercel preview (env above)
+  before merging to `main`.
 
 ---
 

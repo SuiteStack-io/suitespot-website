@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { getDefaultPropertyId } from "@/lib/propertyContext";
+import { format } from "date-fns";
+import { getPublicProperty, getAvailability, getRates } from "@/lib/bookingApi";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
@@ -10,7 +10,6 @@ import { PublicFooter } from "@/components/PublicFooter";
 import InteractivePropertyMap from "@/components/InteractivePropertyMap";
 import northCoast from "@/assets/north-coast.webp";
 import { SEO } from "@/components/SEO";
-import { getActiveRate } from "@/lib/rateResolver";
 
 const lodgingBusinessJsonLd = {
   "@context": "https://schema.org",
@@ -58,36 +57,65 @@ const lodgingBusinessJsonLd = {
 
 const Locations = () => {
   const [properties, setProperties] = useState<any[]>([]);
-  const defaultPropertyId = getDefaultPropertyId();
 
   useEffect(() => {
-    if (!defaultPropertyId) return;
     fetchProperties();
-  }, [defaultPropertyId]);
+  }, []);
 
+  // Coordinates are property-level now (the Booking API returns them on the
+  // property, not per-unit), so the map shows a single marker for the property.
+  // A representative nightly rate + specs come from availability + rates and
+  // are best-effort (the marker still renders without them).
   const fetchProperties = async () => {
-    const { data } = await supabase
-      .from("units")
-      .select("*")
-      .not("latitude", "is", null)
-      .not("longitude", "is", null)
-      .eq("is_private", false)
-      .eq("property_id", defaultPropertyId!)
-      .order("name");
-    
-    if (data) {
-      // Resolve rate plan prices for each unit
-      const enriched = await Promise.all(
-        data.map(async (unit) => {
-          if (!unit.unit_type) return unit;
-          const rate = await getActiveRate(unit.unit_type, new Date(), unit.id);
-          return {
-            ...unit,
-            price_per_night: rate ? rate.weekdayRate : unit.price_per_night,
-          };
-        })
-      );
-      setProperties(enriched);
+    try {
+      const { property } = await getPublicProperty();
+      if (!property) return;
+
+      let pricePerNight = 0;
+      let beds = 0;
+      let baths = 0;
+      let photos: string[] = [];
+
+      try {
+        const { units } = await getAvailability();
+        const sample = units[0];
+        if (sample) {
+          beds = sample.beds ?? 0;
+          baths = sample.baths ?? 0;
+          photos = sample.photos ?? [];
+          const roomType = sample.booking_com_name || sample.unit_type || sample.name;
+          if (roomType) {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const rates = await getRates({
+              room_type: roomType,
+              date_from: format(today, "yyyy-MM-dd"),
+              date_to: format(tomorrow, "yyyy-MM-dd"),
+            });
+            pricePerNight = rates.ratePlan.weekdayRate;
+          }
+        }
+      } catch {
+        // price/specs are optional embellishments for the info window
+      }
+
+      setProperties([
+        {
+          id: property.id,
+          name: property.name,
+          latitude: property.latitude,
+          longitude: property.longitude,
+          address: property.address,
+          unit_number: "",
+          beds,
+          baths,
+          price_per_night: pricePerNight,
+          photos,
+        },
+      ]);
+    } catch (error) {
+      console.error("Error loading property location:", error);
     }
   };
 

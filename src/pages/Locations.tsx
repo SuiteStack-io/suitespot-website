@@ -83,7 +83,8 @@ const Locations = () => {
           beds = sample.beds ?? 0;
           baths = sample.baths ?? 0;
           photos = sample.photos ?? [];
-          const roomType = sample.booking_com_name || sample.unit_type || sample.name;
+          // `name` first to match the rate-plan key (see BookingFlow rate effect).
+          const roomType = sample.name || sample.booking_com_name || sample.unit_type;
           if (roomType) {
             const today = new Date();
             const tomorrow = new Date(today);

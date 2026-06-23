@@ -369,7 +369,11 @@ const BookingFlow = () => {
   useEffect(() => {
     const fetchRate = async () => {
       const unit = units.find(u => u.id === selectedUnit);
-      const roomType = unit?.booking_com_name || unit?.name || unit?.unit_type;
+      // Rate plans are keyed by `units.name` (the canonical room-type name), and
+      // public-create-reservation resolves pricing the same way. Use `name` first
+      // so the displayed price and the server-charged price share one key even if
+      // booking_com_name diverges (e.g. an OTA-specific marketing name).
+      const roomType = unit?.name || unit?.booking_com_name || unit?.unit_type;
       if (!roomType || !dateRange?.from || !dateRange?.to) {
         setRatePlanRate(null);
         setDailyRates([]);

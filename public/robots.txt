@@ -31,4 +31,7 @@ Allow: /
 User-agent: *
 Allow: /
 
+# Machine-readable summary for AI assistants:
+# https://www.findyoursuitespot.com/llms.txt
+
 Sitemap: https://www.findyoursuitespot.com/sitemap.xml

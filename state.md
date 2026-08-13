@@ -155,13 +155,21 @@ Cairo/Zamalek stay queries. Driven by
 **Sister repo `claude-projects/iconia-zamalek-residences` — commits `a2026f6` + `25cbddf`:**
 
 Six long-form guide pages, `llms.txt`, sitemap (11 `<loc>`), then the FAQ/schema correction
-pass. Both live on `www.iconiazamalekresidences.com`.
+pass. Then **`e71fa05` shipped the cinematic redesign** — all six main pages rewritten
+against `css/cinematic.css` + `js/cinematic.js`, carrying the AEO work forward intact.
 
-⚠️ **That repo carries a large uncommitted redesign** (`cinematic.css`/`cinematic.js` plus
-all six main pages rewritten) that Youssef has ruled out of scope for commits. To commit
-anything touching those six files, build from HEAD blobs in a temp dir and commit through a
-temp `GIT_INDEX_FILE` — never stage from the working tree. **The redesign copies do not
-carry the AEO fixes**, so landing the redesign as-is would regress the reception claims.
+Worth knowing, because it cost time: the redesign sat **uncommitted in the working tree from
+Aug 9 to Aug 13** and was widely assumed to be live. It never was. Every production deploy on
+that Vercel project is git-sourced, and the Aug 9 15:59 deploy — made from the CLI, same
+minute the `.vercel` folder appeared — redeployed the March 31 commit `926d7ea`, not the
+working tree. **A `vercel` CLI deploy there does not publish uncommitted work.** If it isn't
+pushed, it isn't live.
+
+Two fact-lock drifts were caught in the redesign copy on the way out: `about.html` and
+`suites.html` said "Daily housekeeping", and the `index.html` stat band had been restyled
+from "24/7 / Guest Support" into "24/7 / On-site team" — a staffed-presence claim that
+contradicts the 10:00–03:00 desk. Both corrected in `e71fa05`. `design-options/` is now in
+`.vercelignore` so the mockups can never reach the live domain via a CLI deploy.
 
 **The fact-lock, which both sites must agree on:**
 

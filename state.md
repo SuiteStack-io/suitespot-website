@@ -1,6 +1,6 @@
 # Project State — SuiteSpot Website
 
-_Last updated: 2026-06-23_
+_Last updated: 2026-08-13_
 
 Public marketing & booking website for **SuiteSpot Hospitality** (Egypt). Single-page
 React app deployed on Vercel at **https://www.findyoursuitespot.com**.
@@ -39,9 +39,9 @@ React app deployed on Vercel at **https://www.findyoursuitespot.com**.
 | `/wellness` | `Wellness` |
 | `/experiences` | `Experiences` |
 | `/nearby` | `Nearby` |
-| `/blog` | `Blog` |
+| `/blog` | `Blog` — route works, but `blog_posts` is empty, so it renders a soft 404. **Removed from `sitemap.xml`**; re-add once posts are published |
 | `/blog/:slug` | `BlogPost` |
-| `/faq` | `FAQ` |
+| `/faq` | `FAQ` — content comes from the content Supabase project, not the repo |
 
 Providers wrapping the app: `QueryClientProvider` → `PropertyProvider` → `BrowserRouter`,
 plus `Toaster` (shadcn) and `Sonner` toasts.
@@ -60,7 +60,9 @@ plus `Toaster` (shadcn) and `Sonner` toasts.
 - `src/lib/` — `auth.tsx`, `propertyContext.tsx`, `bookingApi.ts` (typed Booking API
   client), `utils.ts`. (`rateResolver.ts` removed — replaced by the Booking API.)
 - `src/hooks/` — `use-mobile`, `use-toast`.
-- `public/` — `robots.txt`, `sitemap.xml`, `favicon.png`, fonts, slideshow images, icons.
+- `public/` — `robots.txt`, `sitemap.xml`, `llms.txt`, `favicon.png`, fonts, slideshow
+  images, icons. Anything here must live in `public/` rather than being served by a route:
+  `vercel.json`'s catch-all SPA rewrite would otherwise hand back `index.html`.
 
 ---
 
@@ -132,6 +134,50 @@ org's data.
 
 ---
 
+## AEO publish (2026-08-13) — ✅ live
+
+Answer-engine optimization pass so AI assistants have something quotable to retrieve for
+Cairo/Zamalek stay queries. Driven by
+`Dowey-Workspace/content/suitespot-aeo/DEV-CHECKLIST.md`; strategy in
+`Dowey-Workspace/campaigns/suitespot-aeo-cairo-playbook.md`.
+
+**This repo — commit `63b0471`:**
+
+- **`public/llms.txt`** — SuiteSpot Hospitality fact sheet, live at
+  `https://www.findyoursuitespot.com/llms.txt` as real `text/plain; charset=utf-8`.
+  It has to sit in `public/` to survive the SPA rewrite. Watch the file mode: `cp` from
+  the drafts carries `600` across and would ship unreadable — it needs `644`.
+- **`public/robots.txt`** — references `llms.txt`.
+- **`public/sitemap.xml`** — `/blog` removed (soft 404, see the routes table). Now 10 `<loc>`
+  entries. Building a real blog index was the alternative and was skipped: it needs Supabase
+  content that doesn't exist yet.
+
+**Sister repo `claude-projects/iconia-zamalek-residences` — commits `a2026f6` + `25cbddf`:**
+
+Six long-form guide pages, `llms.txt`, sitemap (11 `<loc>`), then the FAQ/schema correction
+pass. Both live on `www.iconiazamalekresidences.com`.
+
+⚠️ **That repo carries a large uncommitted redesign** (`cinematic.css`/`cinematic.js` plus
+all six main pages rewritten) that Youssef has ruled out of scope for commits. To commit
+anything touching those six files, build from HEAD blobs in a temp dir and commit through a
+temp `GIT_INDEX_FILE` — never stage from the working tree. **The redesign copies do not
+carry the AEO fixes**, so landing the redesign as-is would regress the reception claims.
+
+**The fact-lock, which both sites must agree on:**
+
+| Fact | Value |
+|---|---|
+| Reception desk | Staffed **10:00–03:00 daily** — not a 24-hour lobby |
+| Breakfast | **No** large buffet. Serviced apartment, not a full-service hotel |
+| Housekeeping | Serviced-apartment cadence, **not** automatic daily hotel service |
+| Operator | SuiteSpot Hospitality. **Lemon Spaces is a different operator**, in the same building, leaving 2027-03-31 |
+| Booking listing | "ICONIA Zamalek - Boutique Stay & Wellness Residences" |
+| Suite from-prices | USD 110 / 130 / 145 / 160 (Junior / Deluxe / Terrace / Family) |
+
+Anything that contradicts this row set is a bug, on either domain.
+
+---
+
 ## Deployment & domains
 
 - **Canonical host: `www.findyoursuitespot.com`.** Every SEO signal uses `www`:
@@ -194,3 +240,26 @@ Visitors hit `NET::ERR_CERT_COMMON_NAME_INVALID` ("Your connection is not privat
       a rebase onto `main` (expect a small `state.md` conflict; code files don't overlap).
 - [ ] Optional booking hardening: if a unit ever gets a `booking_com_name` that differs
       from `name`, confirm rate plans stay keyed on `units.name` (the pricing key).
+
+### AEO follow-ups
+
+- [ ] **Youssef:** submit both sitemaps in Google Search Console and Bing Webmaster Tools
+      (Bing is the retrieval path ChatGPT uses). GSC for `iconiazamalekresidences.com` was
+      healthy on 2026-08-13 but still reported 5 discovered pages against the pre-publish
+      sitemap; it should read 11 after a resubmit. `findyoursuitespot.com` in GSC and both
+      domains in Bing are unchecked.
+- [ ] **Youssef:** ops copy consistency — Booking.com property description, Google Business
+      Profile hours/Q&A, and the WhatsApp business intro all need to match the fact-lock
+      above. This is checklist section 6 and it blocks the campaign.
+- [ ] **`src/pages/IconiaZamalek.tsx:66`** — the meta description advertises "24/7 concierge"
+      for the property whose desk runs 10:00–03:00. Closer to a reception claim than the
+      "24/7 support" wording elsewhere, so it likely wants rewording. Left alone because it's
+      an ops call, not a dev one.
+- [ ] **Unverified:** the `/faq` route renders from the content Supabase project, so its
+      answers were never checked against the fact-lock. If any of them claim 24/7 reception
+      or a breakfast buffet, this domain now contradicts the sister site. Worth a query.
+- [ ] `sameAs` on the ICONIA `LodgingBusiness` node is missing the Booking.com listing URL
+      and the Google Business Profile URL. Neither exists anywhere in either repo and they
+      were deliberately not invented — supply them and it's a one-line add.
+- [ ] Optional: mirror longer `/llms-full.txt` versions on both domains (checklist section 1,
+      marked optional).

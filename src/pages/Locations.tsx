@@ -43,7 +43,7 @@ const lodgingBusinessJsonLd = {
     { "@type": "LocationFeatureSpecification", "name": "Yoga Classes" },
     { "@type": "LocationFeatureSpecification", "name": "Full Kitchen" },
     { "@type": "LocationFeatureSpecification", "name": "Housekeeping" },
-    { "@type": "LocationFeatureSpecification", "name": "24/7 Support" },
+    { "@type": "LocationFeatureSpecification", "name": "Guest Support" },
     { "@type": "LocationFeatureSpecification", "name": "Concierge Service" }
   ],
   "containsPlace": [
@@ -52,7 +52,7 @@ const lodgingBusinessJsonLd = {
     { "@type": "HotelRoom", "name": "Two-Bedroom Suite", "description": "Premium two-bedroom apartment ideal for families" }
   ],
   "checkinTime": "15:00",
-  "checkoutTime": "11:00"
+  "checkoutTime": "12:00"
 };
 
 const Locations = () => {

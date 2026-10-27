@@ -56,11 +56,11 @@ const Nearby = () => {
               </div>
               <div className="grid md:grid-cols-3 gap-6">
                 <Card className="p-6">
-                  <h3 className="text-xl font-semibold text-foreground mb-2">Sequoia</h3>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">Pier 88</h3>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Mediterranean dining with stunning Nile views. Perfect for sunset dinners.
+                    Italian food on a boat moored on the Nile.
                   </p>
-                  <p className="text-xs text-accent">5 min walk</p>
+                  <p className="text-xs text-accent">10 min walk</p>
                 </Card>
                 <Card className="p-6">
                   <h3 className="text-xl font-semibold text-foreground mb-2">Kazoku</h3>
@@ -89,11 +89,11 @@ const Nearby = () => {
               </div>
               <div className="grid md:grid-cols-3 gap-6">
                 <Card className="p-6">
-                  <h3 className="text-xl font-semibold text-foreground mb-2">Beano's Café</h3>
+                  <h3 className="text-xl font-semibold text-foreground mb-2">30 North</h3>
                   <p className="text-sm text-muted-foreground mb-3">
-                    Local favorite for specialty coffee and pastries.
+                    Specialty coffee in the courtyard of ICONIA Zamalek.
                   </p>
-                  <p className="text-xs text-accent">3 min walk</p>
+                  <p className="text-xs text-accent">In the courtyard</p>
                 </Card>
                 <Card className="p-6">
                   <h3 className="text-xl font-semibold text-foreground mb-2">Café Greco</h3>

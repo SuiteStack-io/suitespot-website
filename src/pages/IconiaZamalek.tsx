@@ -63,7 +63,7 @@ const IconiaZamalek = () => {
     <div className="min-h-screen bg-background">
       <SEO
         title="Iconia Zamalek Serviced Apartments | SuiteSpot Hospitality Cairo"
-        description="Luxury serviced apartments at Iconia Zamalek, managed by SuiteSpot Hospitality. Prime location in Cairo's exclusive Zamalek district. Pool, gym, 24/7 concierge. Book direct for best rates."
+        description="Luxury serviced apartments at Iconia Zamalek, managed by SuiteSpot Hospitality. Prime location in Cairo's exclusive Zamalek district. Pool, gym, reception 08:00–03:00. Book direct for best rates."
         path="/iconia-zamalek"
         breadcrumbs={[
           { name: "Home", path: "/" },

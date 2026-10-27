@@ -175,7 +175,8 @@ contradicts the 10:00–03:00 desk. Both corrected in `e71fa05`. `design-options
 
 | Fact | Value |
 |---|---|
-| Reception desk | Staffed **10:00–03:00 daily** — not a 24-hour lobby |
+| Reception desk | Staffed **08:00–03:00 daily** — not a 24-hour lobby |
+| Check-in / out | From 15:00 / by **12:00** |
 | Breakfast | **No** large buffet. Serviced apartment, not a full-service hotel |
 | Housekeeping | Serviced-apartment cadence, **not** automatic daily hotel service |
 | Operator | SuiteSpot Hospitality. **Lemon Spaces is a different operator**, in the same building, leaving 2027-03-31 |
@@ -259,10 +260,8 @@ Visitors hit `NET::ERR_CERT_COMMON_NAME_INVALID` ("Your connection is not privat
 - [ ] **Youssef:** ops copy consistency — Booking.com property description, Google Business
       Profile hours/Q&A, and the WhatsApp business intro all need to match the fact-lock
       above. This is checklist section 6 and it blocks the campaign.
-- [ ] **`src/pages/IconiaZamalek.tsx:66`** — the meta description advertises "24/7 concierge"
-      for the property whose desk runs 10:00–03:00. Closer to a reception claim than the
-      "24/7 support" wording elsewhere, so it likely wants rewording. Left alone because it's
-      an ops call, not a dev one.
+- [x] **`src/pages/IconiaZamalek.tsx:66`** — "24/7 concierge" in the meta description replaced
+      with "reception 08:00–03:00" (owner-approved 2026-10-27).
 - [ ] **Unverified:** the `/faq` route renders from the content Supabase project, so its
       answers were never checked against the fact-lock. If any of them claim 24/7 reception
       or a breakfast buffet, this domain now contradicts the sister site. Worth a query.

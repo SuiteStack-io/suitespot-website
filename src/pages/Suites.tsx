@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Link } from "react-router-dom";
-import { Wifi, Tv, Coffee, Wind, Users, Bed, Loader2, Camera } from "lucide-react";
+import { Wifi, Tv, Coffee, Wind, Users, Bed, Loader2, Camera, Rotate3d } from "lucide-react";
 import { getAvailability } from "@/lib/bookingApi";
 import { content } from "@/integrations/content/client";
 import { useToast } from "@/hooks/use-toast";
@@ -10,6 +10,8 @@ import { PublicNav } from "@/components/PublicNav";
 import { PublicFooter } from "@/components/PublicFooter";
 import { SEO } from "@/components/SEO";
 import SuiteLightbox from "@/components/SuiteLightbox";
+import Suite360Viewer from "@/components/Suite360Viewer";
+import { getTour360, type TourRoom } from "@/lib/tour360";
 
 interface Unit {
   id: string;
@@ -76,6 +78,7 @@ const Suites = () => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [tour, setTour] = useState<{ suiteName: string; rooms: TourRoom[] } | null>(null);
 
   useEffect(() => {
     const fetchUnits = async () => {
@@ -256,6 +259,12 @@ const Suites = () => {
                   const beds = unit.beds ? `${unit.beds} Bed${unit.beds > 1 ? 's' : ''}` : getDefaultBeds(unit.unit_type);
                   const allPhotos = unit.allPhotos || unit.photos || [];
                   const displayPhoto = unit.coverPhoto || allPhotos[0];
+                  const suiteName = unit.booking_com_name || unit.name;
+                  const tourRooms = getTour360(suiteName);
+                  const openTour = (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    if (tourRooms) setTour({ suiteName, rooms: tourRooms });
+                  };
                   
                   return (
                     <Card key={unit.id} className="overflow-hidden">
@@ -278,6 +287,16 @@ const Suites = () => {
                                   <Camera className="h-3.5 w-3.5" />
                                   {allPhotos.length}
                                 </div>
+                              )}
+                              {/* 360 tour */}
+                              {tourRooms && (
+                                <button
+                                  onClick={openTour}
+                                  className="absolute top-3 left-3 bg-white/90 hover:bg-white text-foreground text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm transition-colors"
+                                >
+                                  <Rotate3d className="h-3.5 w-3.5 text-accent" />
+                                  360° tour
+                                </button>
                               )}
                               {/* Dot indicators */}
                               {allPhotos.length > 1 && allPhotos.length <= 8 && (
@@ -341,9 +360,17 @@ const Suites = () => {
                             </div>
                           </div>
 
-                          <Button asChild className="w-full bg-accent hover:bg-accent/90">
-                            <Link to={`/book?unitType=${encodeURIComponent(unit.unit_type || '')}`}>Check Availability</Link>
-                          </Button>
+                          <div className={tourRooms ? "grid sm:grid-cols-2 gap-3" : ""}>
+                            {tourRooms && (
+                              <Button variant="outline" className="w-full" onClick={openTour}>
+                                <Rotate3d className="w-4 h-4 mr-2 text-accent" />
+                                View in 360°
+                              </Button>
+                            )}
+                            <Button asChild className="w-full bg-accent hover:bg-accent/90">
+                              <Link to={`/book?unitType=${encodeURIComponent(unit.unit_type || '')}`}>Check Availability</Link>
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </Card>
@@ -401,6 +428,16 @@ const Suites = () => {
         open={lightboxOpen}
         onClose={() => setLightboxOpen(false)}
       />
+
+      {/* 360 tour */}
+      {tour && (
+        <Suite360Viewer
+          suiteName={tour.suiteName}
+          rooms={tour.rooms}
+          open={!!tour}
+          onClose={() => setTour(null)}
+        />
+      )}
     </div>
   );
 };

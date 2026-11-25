@@ -8,6 +8,9 @@
     }
   ],
   "rewrites": [
+    { "source": "/sb/pms/functions/v1/:fn(public-[a-z-]+)", "destination": "https://zcrcjxidzyfnehebfnbq.supabase.co/functions/v1/:fn" },
+    { "source": "/sb/content/rest/v1/:path*", "destination": "https://saarhzqccbeucbdodylp.supabase.co/rest/v1/:path*" },
+    { "source": "/sb/content/storage/v1/object/public/:path*", "destination": "https://saarhzqccbeucbdodylp.supabase.co/storage/v1/object/public/:path*" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

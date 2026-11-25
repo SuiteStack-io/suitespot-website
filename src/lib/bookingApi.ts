@@ -1,3 +1,5 @@
+import { supabaseBaseUrl } from './supabaseProxy';
+
 // Hostbase public Booking API client (Phase 2.4-B).
 //
 // The public site no longer queries the PMS booking tables directly with the
@@ -9,7 +11,9 @@
 // (VITE_SUPABASE_URL). All endpoints are POST + JSON, with verify_jwt=false, so
 // no apikey/JWT is sent — plain fetch is correct.
 
-const BOOKING_API = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+// Same-origin proxy when deployed: browsers on some networks stall connecting
+// to supabase.co (see src/lib/supabaseProxy.ts).
+const BOOKING_API = `${supabaseBaseUrl(import.meta.env.VITE_SUPABASE_URL, 'pms')}/functions/v1`;
 
 // On localhost / Vercel preview the Origin isn't a tenant domain, so the API
 // can't resolve the tenant from it. serving_host is an optional fallback used

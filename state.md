@@ -51,7 +51,7 @@ plus `Toaster` (shadcn) and `Sonner` toasts.
 ## Key source areas
 
 - `src/pages/` — one component per route (see table above).
-- `src/components/` — feature components: `HeroSlideshow`, `BookingWidget`,
+- `src/components/` — feature components: `HeroSlideshow`, `Suite360Viewer` (WebGL 360° room tour, opened from `/suites`; room lists in `src/lib/tour360.ts`, panoramas in `public/360/`), `BookingWidget`,
   `InteractivePropertyMap`, `OurStorySlideshow`, `SuiteLightbox`, `PublicNav`,
   `PublicFooter`, `BlogContentRenderer`, `SEO`.
 - `src/components/ui/` — shadcn/Radix UI primitives.
